@@ -2,6 +2,8 @@ import requests
 from bs4 import BeautifulSoup
 import csv
 import time
+import os
+import re
 
 
 class MyParser:
@@ -13,6 +15,30 @@ class MyParser:
     def find_names(self) -> list[BeautifulSoup]:
         # Find all elements names with class "link-overlay"
         return self.soup.find_all('a', class_='link-overlay')
+    
+    def find_img(self) -> None:
+        img_soup = self.soup.find_all('div', class_='lazy image')
+        base_url = 'https://www.jahipaun.ee/'
+
+        for img in img_soup:
+            data_bg = img.get('data-bg')
+            full_url = base_url + data_bg  # Concatenate base_url and data_bg
+            image_name = os.path.basename(data_bg)
+            image_name = re.sub(r'[^\w\-_\. ]', '_', image_name)  # Replace invalid characters with '_'
+
+            ammo_type = self.url.split('/')[-4]
+            folder_path = os.path.join('images', ammo_type)
+            os.makedirs(folder_path, exist_ok=True)
+
+            image_path = os.path.join(folder_path, image_name)
+
+            try:
+                response = requests.get(full_url)  # Use full_url to download the image
+                with open(image_path, 'wb') as file:
+                    file.write(response.content)
+                print(f"Image saved: {image_path}")
+            except requests.exceptions.RequestException as e:
+                print(f"Error downloading image: {e}")
 
     def find_divs(self) -> list[BeautifulSoup]:
         # Find all div elements with class "price"
@@ -50,8 +76,8 @@ class MyParser:
         day = current_time.tm_mday
         month = time.strftime('%B', current_time)
         return month, day
-
-
+  
+ 
 if __name__ == '__main__':
     urls = {
         'handgun': 'https://www.jahipaun.ee/en/online-shop/kategooria/ammo/handgun/show-500/online-shop/basket-price',
@@ -69,6 +95,8 @@ if __name__ == '__main__':
         parser.match_check(name_elements, price_elements, link_elements)
 
         ammo_list = parser.zip_ammo(name_elements, price_elements, link_elements)
+
+        parser.find_img()  # Call the find_img function
 
         month, day = parser.add_time()
         filename = f"{ammo_type}_ammo_{month}_{day}.csv"
