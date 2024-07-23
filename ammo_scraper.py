@@ -4,12 +4,15 @@ import csv
 import time
 import os
 import re
+import random
 
 
 class MyParser:
     def __init__(self, url: str):
         self.url = url
-        self.response = requests.get(url)
+        self.session = requests.Session()
+        self.session.mount('https://', requests.adapters.HTTPAdapter(max_retries=5))
+        self.response = self.session.get(url)
         self.soup = BeautifulSoup(self.response.content, 'lxml')
 
     def find_names(self) -> list[BeautifulSoup]:
@@ -18,11 +21,14 @@ class MyParser:
     
     def find_img(self) -> None:
         img_soup = self.soup.find_all('div', class_='lazy image')
-        base_url = 'https://www.jahipaun.ee/'
+        base_url = 'https://www.jahipaun.ee'  # Remove the trailing slash
 
         for img in img_soup:
             data_bg = img.get('data-bg')
-            full_url = base_url + data_bg  # Concatenate base_url and data_bg
+            if data_bg.startswith('/'):
+                full_url = base_url + data_bg
+            else:
+                full_url = base_url + '/' + data_bg
             image_name = os.path.basename(data_bg)
             image_name = re.sub(r'[^\w\-_\. ]', '_', image_name)  # Replace invalid characters with '_'
 
@@ -33,10 +39,15 @@ class MyParser:
             image_path = os.path.join(folder_path, image_name)
 
             try:
-                response = requests.get(full_url)  # Use full_url to download the image
+                response = self.session.get(full_url, timeout=10)
                 with open(image_path, 'wb') as file:
                     file.write(response.content)
                 print(f"Image saved: {image_path}")
+                
+                # Add a random delay between 0.3 and 0.7 seconds
+                delay = random.uniform(0.1, 0.5)
+                time.sleep(delay)
+                
             except requests.exceptions.RequestException as e:
                 print(f"Error downloading image: {e}")
 
@@ -96,8 +107,7 @@ if __name__ == '__main__':
 
         ammo_list = parser.zip_ammo(name_elements, price_elements, link_elements)
 
-        parser.find_img()  # Call the find_img function
-
         month, day = parser.add_time()
         filename = f"{ammo_type}_ammo_{month}_{day}.csv"
         parser.save_ammo_in_csv(ammo_list, filename)
+        parser.find_img()
